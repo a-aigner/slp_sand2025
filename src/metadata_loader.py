@@ -12,14 +12,16 @@ from typing import Dict, Tuple, Optional
 class MetadataLoader:
     """Load and process metadata from Excel files."""
     
-    def __init__(self, excel_path: str):
+    def __init__(self, excel_path: str, sheet_name: str = None):
         """
         Initialize the metadata loader.
         
         Args:
             excel_path: Path to the Excel file containing metadata
+            sheet_name: Name of the sheet to load (default: first sheet)
         """
         self.excel_path = Path(excel_path)
+        self.sheet_name = sheet_name
         self.metadata_df = None
         self.id_column = 'ID'
         self.age_column = 'Age'
@@ -37,9 +39,13 @@ class MetadataLoader:
             raise FileNotFoundError(f"Excel file not found: {self.excel_path}")
         
         # Read Excel file
-        self.metadata_df = pd.read_excel(self.excel_path)
+        if self.sheet_name:
+            self.metadata_df = pd.read_excel(self.excel_path, sheet_name=self.sheet_name)
+            print(f"Loaded metadata from: {self.excel_path} (Sheet: {self.sheet_name})")
+        else:
+            self.metadata_df = pd.read_excel(self.excel_path)
+            print(f"Loaded metadata from: {self.excel_path}")
         
-        print(f"Loaded metadata from: {self.excel_path}")
         print(f"Total records: {len(self.metadata_df)}")
         print(f"Columns: {self.metadata_df.columns.tolist()}")
         

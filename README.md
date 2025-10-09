@@ -174,7 +174,8 @@ python train.py \
 - Loads .wav files from `phonationA` and `phonationE` folders
 - Extracts audio features automatically
 - Trains a Random Forest classifier (default)
-- Uses 80% data for training, 20% for testing
+- Uses all data for training
+- Evaluates with cross-validation
 - Prints accuracy results
 
 ### Example 2: Using Metadata to Predict Class
@@ -190,9 +191,12 @@ python train.py \
 ```
 
 **What this does:**
-- Loads all .wav files from all subdirectories
-- Matches each file with Excel data by ID
+- Loads .wav files from all subdirectories
+- Reads training data from "Training Baseline - Task 1" sheet in Excel
+- Reads validation data from "Validation Baseline - Task 1" sheet in Excel
+- Matches files with Excel data by ID
 - Combines audio features with Age and Sex
+- Trains on training data, evaluates on validation data
 - Predicts Class values (1-5) from Excel
 - Uses Logistic Regression model
 
@@ -362,9 +366,62 @@ python train.py --data-dir data/task1/training/phonationA --label phonationA
 - `Sex` - Gender (M/F, Male/Female, or 0/1)
 - `Class` - Target class to predict (1-5 or any integers)
 
+**Excel file should have these sheets:**
+- Training sheet (default: "Training Baseline - Task 1") - Data for training
+- Validation sheet (default: "Validation Baseline - Task 1") - Data for validation/testing
+
+---
+
+#### `--training-sheet`
+**What it does:** Specify which Excel sheet contains training data
+
+**Type:** String
+
+**Default:** `'Training Baseline - Task 1'`
+
+**Example:**
+```bash
+--training-sheet "Training Baseline - Task 1"
+--training-sheet "SAND - TRAINING set - Task 1"
+```
+
+**When to use:**
+- When your Excel file has a different sheet name for training data
+- The sheet name must match EXACTLY (case-sensitive, including spaces)
+
+**Note:** This parameter is optional - it uses the default sheet name if not specified
+
+---
+
+#### `--validation-sheet`
+**What it does:** Specify which Excel sheet contains validation data
+
+**Type:** String
+
+**Default:** `'Validation Baseline - Task 1'`
+
+**Example:**
+```bash
+--validation-sheet "Validation Baseline - Task 1"
+--validation-sheet "My Custom Validation Sheet"
+```
+
+**When to use:**
+- When your Excel file has a different sheet name for validation data
+- The sheet name must match EXACTLY (case-sensitive, including spaces)
+
+**Note:** This parameter is optional - it uses the default sheet name if not specified
+
+**How validation works:**
+- Model trains on data from the training sheet
+- Model is evaluated on data from the validation sheet (unseen during training)
+- Validation accuracy shows true performance on new data
+
 ---
 
 ### Model Parameters
+
+**Note:** The model is trained on 100% of your training data. Cross-validation is used to estimate performance on unseen data.
 
 #### `--model-type`
 **What it does:** Choose which machine learning algorithm to use
@@ -422,32 +479,6 @@ python train.py --data-dir data/task1/training/phonationA --label phonationA
 ```bash
 --model-type linear_regression
 ```
-
----
-
-#### `--test-size`
-**What it does:** Fraction of data used for testing (validation)
-
-**Type:** Decimal between 0 and 1
-
-**Default:** `0.2` (20% test, 80% train)
-
-**Examples:**
-```bash
---test-size 0.2    # 20% test, 80% train (default)
---test-size 0.3    # 30% test, 70% train
---test-size 0.1    # 10% test, 90% train
-```
-
-**When to use:**
-- `0.2` (default) - Standard for most datasets
-- `0.3` - When you have lots of data
-- `0.1` - When you have limited data
-
-**How it works:**
-- Training data: Used to learn patterns
-- Test data: Used to evaluate performance (unseen data)
-- Split is random but reproducible
 
 ---
 
@@ -805,12 +836,18 @@ python train.py \
 **Command structure:**
 ```bash
 python train.py --data-dir DIRECTORY --use-metadata --excel-file FILE.xlsx
+
+# With custom sheet names (optional)
+python train.py --data-dir DIRECTORY --use-metadata --excel-file FILE.xlsx --training-sheet "SHEET1" --validation-sheet "SHEET2"
 ```
 
 **How it works:**
 - Reads Excel file with ID, Age, Sex, Class columns
+- Loads training data from training sheet (default: "Training Baseline - Task 1")
+- Loads validation data from validation sheet (default: "Validation Baseline - Task 1")
 - Matches .wav files to Excel by ID in filename
 - Uses Age and Sex as additional features
+- Trains on training data, evaluates on separate validation data
 - Predicts Class values from Excel (not folder names)
 
 **Example:**
@@ -1044,6 +1081,33 @@ venv\Scripts\activate
 
 ---
 
+**Problem:** "Worksheet named 'Training Baseline - Task 1' not found"
+
+**Cause:** Excel sheet name doesn't match exactly
+
+**Solutions:**
+
+1. Check actual sheet names:
+   ```python
+   import pandas as pd
+   excel = pd.ExcelFile('data/task1/sand_task_1.xlsx')
+   print(excel.sheet_names)
+   ```
+
+2. Use exact sheet name with parameters:
+   ```bash
+   python train.py \
+       --data-dir data/task1/training \
+       --use-metadata \
+       --excel-file data/task1/sand_task_1.xlsx \
+       --training-sheet "Your Exact Sheet Name" \
+       --validation-sheet "Your Exact Validation Sheet Name"
+   ```
+
+3. Remember: Sheet names are case-sensitive and spaces matter!
+
+---
+
 ### Performance Issues
 
 **Problem:** Low accuracy (< 50%)
@@ -1072,15 +1136,15 @@ venv\Scripts\activate
    --model-type svm
    ```
 
-4. **Overfitting** (Train accuracy >> Test accuracy)
+4. **Overfitting** (Training accuracy >> CV accuracy)
    ```
    Training accuracy: 90%
-   Test accuracy: 30%
+   CV accuracy: 30%
    
    Solutions:
    - Use more data
    - Try simpler model (logistic_regression)
-   - Increase test-size to 0.3
+   - Check if data is representative
    ```
 
 ---
@@ -1266,21 +1330,21 @@ Model saved to: models/logistic_regression_20251009_143022.pkl
 
 **What these mean:**
 
-- **Total samples:** How many audio files were used
+- **Total samples:** How many audio files were used for training
 - **Number of features:** Size of feature vector
 - **Number of classes:** How many categories to predict
-- **Test Accuracy:** Performance on unseen data (0-1 scale, higher is better)
-- **Cross-validation Accuracy:** Average across 5 different splits (more reliable)
+- **Training Accuracy:** Performance on the training data (0-1 scale, higher is better)
+- **Cross-validation Accuracy:** Estimated performance on unseen data using 5-fold CV (more reliable)
 - **+/- value:** Uncertainty in CV score (smaller is more stable)
 
 **Good results:**
-- Test accuracy > 0.70 (70%)
-- CV accuracy close to test accuracy (within 0.05)
+- Training accuracy > 0.70 (70%)
+- CV accuracy close to training accuracy (within 0.05)
 - Small +/- value (< 0.10)
 
 **Poor results:**
-- Test accuracy < 0.50 (50%)
-- Large gap between train and test accuracy (overfitting)
+- Training accuracy < 0.50 (50%)
+- Large gap between training and CV accuracy
 - Large +/- value (> 0.20) (unstable)
 
 ---
@@ -1327,8 +1391,7 @@ pip list | grep scikit-learn
 # Quick test with minimal data
 python train.py \
     --data-dir data/task1/training \
-    --subdirs phonationA phonationE \
-    --test-size 0.5
+    --subdirs phonationA phonationE
 ```
 
 ---
@@ -1343,6 +1406,9 @@ python train.py --data-dir data/task1/training --subdirs phonationA phonationE
 **Metadata mode (predict Class 1-5):**
 ```bash
 python train.py --data-dir data/task1/training --use-metadata --excel-file data/task1/sand_task_1.xlsx
+
+# With custom sheet names
+python train.py --data-dir data/task1/training --use-metadata --excel-file data/task1/sand_task_1.xlsx --training-sheet "My Training Sheet" --validation-sheet "My Validation Sheet"
 ```
 
 **Temporal features:**

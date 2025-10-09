@@ -149,7 +149,8 @@ class AudioDataLoader:
         self, 
         data_dir: str, 
         excel_path: str,
-        subdirs: List[str] = None
+        subdirs: List[str] = None,
+        sheet_name: str = None
     ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
         """
         Load audio files and merge with metadata from Excel file.
@@ -159,6 +160,7 @@ class AudioDataLoader:
             data_dir: Directory containing subdirectories with .wav files
             excel_path: Path to Excel file with metadata (ID, Age, Sex, Class)
             subdirs: List of subdirectory names to load (if None, loads all subdirectories)
+            sheet_name: Name of the Excel sheet to load (e.g., 'Training Baseline - Task1')
             
         Returns:
             Tuple of (features array with metadata, class labels, metadata DataFrame)
@@ -168,7 +170,7 @@ class AudioDataLoader:
         print("=" * 80)
         
         # Load metadata from Excel
-        metadata_loader = MetadataLoader(excel_path)
+        metadata_loader = MetadataLoader(excel_path, sheet_name=sheet_name)
         metadata_loader.load_metadata()
         
         # Display metadata summary

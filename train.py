@@ -78,6 +78,18 @@ Examples:
         default=None,
         help='Path to Excel file containing metadata (ID, Age, Sex, Class). Required if --use-metadata is set'
     )
+    parser.add_argument(
+        '--training-sheet',
+        type=str,
+        default='Training Baseline - Task 1',
+        help='Name of Excel sheet with training data (default: "Training Baseline - Task 1")'
+    )
+    parser.add_argument(
+        '--validation-sheet',
+        type=str,
+        default='Validation Baseline - Task 1',
+        help='Name of Excel sheet with validation data (default: "Validation Baseline - Task 1")'
+    )
     
     # Model arguments
     parser.add_argument(
@@ -86,12 +98,6 @@ Examples:
         choices=['random_forest', 'svm', 'logistic_regression', 'linear_regression'],
         default='random_forest',
         help='Type of model to train (default: random_forest)'
-    )
-    parser.add_argument(
-        '--test-size',
-        type=float,
-        default=0.2,
-        help='Fraction of data to use for testing (default: 0.2)'
     )
     
     # Feature extraction arguments
@@ -211,7 +217,7 @@ Examples:
         print(f"  Delta features: {args.use_deltas}")
         print(f"  Delta-delta features: {args.use_delta_deltas}")
         print(f"  Context frames: {args.context_frames}")
-    print(f"Test size: {args.test_size} (Training: {int((1-args.test_size)*100)}%, Test: {int(args.test_size*100)}%)")
+    print(f"Training: Using 100% of training data")
     print(f"Sample rate: {args.sample_rate}")
     print(f"Number of MFCCs: {args.n_mfcc}")
     print("=" * 80)
@@ -246,12 +252,25 @@ Examples:
     try:
         if args.use_metadata:
             # Metadata mode: load with Age/Sex features to predict Class
-            print("Loading data with metadata (Age, Sex) to predict Class...")
-            X, y, metadata = data_loader.load_with_metadata(
+            print("Loading TRAINING data with metadata (Age, Sex) to predict Class...")
+            X_train, y_train, metadata_train = data_loader.load_with_metadata(
                 str(data_dir),
                 args.excel_file,
-                subdirs=args.subdirs
+                subdirs=args.subdirs,
+                sheet_name=args.training_sheet
             )
+            
+            print("\nLoading VALIDATION data with metadata...")
+            X_val, y_val, metadata_val = data_loader.load_with_metadata(
+                str(data_dir),
+                args.excel_file,
+                subdirs=args.subdirs,
+                sheet_name=args.validation_sheet
+            )
+            
+            # Combine for training (will separate later)
+            X = X_train
+            y = y_train
         elif args.label is not None:
             # Single directory mode
             print(f"Loading from single directory with label '{args.label}'...")
@@ -294,7 +313,10 @@ Examples:
     print("=" * 80)
     
     try:
-        results = classifier.train(X, y, test_size=args.test_size)
+        if args.use_metadata:
+            results = classifier.train(X, y, X_val, y_val)
+        else:
+            results = classifier.train(X, y)
     except Exception as e:
         print(f"\nError training model: {e}")
         import traceback
@@ -336,17 +358,19 @@ Examples:
     if args.model_type == 'linear_regression':
         # Regression summary
         print(f"Model type: Linear Regression")
-        print(f"\nTest R²: {results.get('test_r2', 'N/A'):.4f}")
-        print(f"Test MSE: {results.get('test_mse', 'N/A'):.4f}")
-        print(f"Test Accuracy (rounded): {results['test_accuracy']:.4f}")
+        print(f"\nTraining R²: {results.get('train_r2', 'N/A'):.4f}")
+        print(f"Training MSE: {results.get('train_mse', 'N/A'):.4f}")
+        print(f"Training Accuracy (rounded): {results['train_accuracy']:.4f}")
         print(f"Cross-validation R²: {results['cv_mean']:.4f} (+/- {results['cv_std'] * 2:.4f})")
     else:
         # Classification summary
         unique_classes = len(set(y))
         print(f"Number of classes: {unique_classes}")
         print(f"Classes: {', '.join(map(str, classifier.class_names))}")
-        print(f"\nTest Accuracy: {results['test_accuracy']:.4f}")
+        print(f"\nTraining Accuracy: {results['train_accuracy']:.4f}")
         print(f"Cross-validation Accuracy: {results['cv_mean']:.4f} (+/- {results['cv_std'] * 2:.4f})")
+        if 'val_accuracy' in results:
+            print(f"Validation Accuracy: {results['val_accuracy']:.4f}")
     
     print(f"\nModel saved to: {model_path}")
     print("=" * 80)

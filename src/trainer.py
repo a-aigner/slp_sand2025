@@ -83,40 +83,36 @@ class AudioClassifier:
         
         return pipeline
     
-    def train(self, X: np.ndarray, y: np.ndarray, test_size: float = 0.2) -> Dict[str, Any]:
+    def train(self, X: np.ndarray, y: np.ndarray, X_val: np.ndarray = None, y_val: np.ndarray = None) -> Dict[str, Any]:
         """
-        Train the model and evaluate on test set.
+        Train the model on all provided training data and evaluate on validation data if provided.
         
         Args:
-            X: Feature matrix
-            y: Labels (strings for classification) or numeric values (for regression)
-            test_size: Fraction of data to use for testing (default: 0.2 = 20% test, 80% train)
+            X: Training feature matrix
+            y: Training labels (strings for classification) or numeric values (for regression)
+            X_val: Validation feature matrix (optional)
+            y_val: Validation labels (optional)
             
         Returns:
             Dictionary containing training results and metrics
         """
         print(f"\nTraining {self.model_type} model...")
-        print(f"Using {int((1-test_size)*100)}% for training, {int(test_size*100)}% for testing")
+        print(f"Using all {len(X)} samples for training")
+        if X_val is not None:
+            print(f"Validation set size: {len(X_val)}")
         
         # Handle regression vs classification
         if self.is_regression:
             # For regression, keep numeric values
-            y_train_val = y.astype(float)
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y_train_val, test_size=test_size, random_state=self.random_state
-            )
+            y_train = y.astype(float)
         else:
             # For classification, encode labels
-            y_encoded = self.label_encoder.fit_transform(y)
+            y_train = self.label_encoder.fit_transform(y)
             self.class_names = self.label_encoder.classes_
-            
-            # Split data with stratification for classification
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y_encoded, test_size=test_size, random_state=self.random_state, stratify=y_encoded
-            )
+        
+        X_train = X
         
         print(f"Training set size: {len(X_train)}")
-        print(f"Test set size: {len(X_test)}")
         
         # Create and train pipeline
         self.pipeline = self.create_pipeline()
@@ -124,95 +120,107 @@ class AudioClassifier:
         
         # Evaluate based on model type
         if self.is_regression:
-            # Regression metrics
+            # Regression metrics on training data
             y_train_pred = self.pipeline.predict(X_train)
-            y_test_pred = self.pipeline.predict(X_test)
             
             train_mse = mean_squared_error(y_train, y_train_pred)
-            test_mse = mean_squared_error(y_test, y_test_pred)
             train_r2 = r2_score(y_train, y_train_pred)
-            test_r2 = r2_score(y_test, y_test_pred)
             
             # Cross-validation for regression
             cv_scores = cross_val_score(self.pipeline, X_train, y_train, cv=5, scoring='r2')
             
             print(f"\nTraining R²: {train_r2:.4f}, MSE: {train_mse:.4f}")
-            print(f"Test R²: {test_r2:.4f}, MSE: {test_mse:.4f}")
             print(f"Cross-validation R²: {cv_scores.mean():.4f} (+/- {cv_scores.std() * 2:.4f})")
             
             # Round predictions to nearest class for evaluation
-            y_test_pred_rounded = np.round(y_test_pred).astype(int)
-            y_test_rounded = np.round(y_test).astype(int)
+            y_train_pred_rounded = np.round(y_train_pred).astype(int)
+            y_train_rounded = np.round(y_train).astype(int)
             
             # Calculate accuracy when treating as classification
-            rounded_accuracy = accuracy_score(y_test_rounded, y_test_pred_rounded)
-            print(f"Accuracy (rounded to nearest class): {rounded_accuracy:.4f}")
+            rounded_accuracy = accuracy_score(y_train_rounded, y_train_pred_rounded)
+            print(f"Training Accuracy (rounded to nearest class): {rounded_accuracy:.4f}")
             
             # Display confusion matrix for rounded predictions
-            cm_rounded = confusion_matrix(y_test_rounded, y_test_pred_rounded)
+            cm_rounded = confusion_matrix(y_train_rounded, y_train_pred_rounded)
             # Set class names for regression (numeric values)
-            unique_classes = np.unique(np.concatenate([y_test_rounded, y_test_pred_rounded]))
+            unique_classes = np.unique(np.concatenate([y_train_rounded, y_train_pred_rounded]))
             self.class_names = unique_classes
             self._print_confusion_matrix(cm_rounded)
             
             results = {
                 'train_r2': train_r2,
-                'test_r2': test_r2,
                 'train_mse': train_mse,
-                'test_mse': test_mse,
-                'test_accuracy': rounded_accuracy,
+                'train_accuracy': rounded_accuracy,
                 'cv_scores': cv_scores,
                 'cv_mean': cv_scores.mean(),
                 'cv_std': cv_scores.std(),
-                'X_test': X_test,
-                'y_test': y_test,
-                'y_test_pred': y_test_pred,
-                'confusion_matrix': confusion_matrix(y_test_rounded, y_test_pred_rounded)
+                'confusion_matrix': cm_rounded
             }
         else:
             # Classification metrics
             y_train_pred = self.pipeline.predict(X_train)
             train_accuracy = accuracy_score(y_train, y_train_pred)
             
-            y_test_pred = self.pipeline.predict(X_test)
-            test_accuracy = accuracy_score(y_test, y_test_pred)
-            
             # Cross-validation
             cv_scores = cross_val_score(self.pipeline, X_train, y_train, cv=5)
             
             print(f"\nTraining Accuracy: {train_accuracy:.4f}")
-            print(f"Test Accuracy: {test_accuracy:.4f}")
             print(f"Cross-validation Accuracy: {cv_scores.mean():.4f} (+/- {cv_scores.std() * 2:.4f})")
-            
-            # Generate classification report
-            print("\nClassification Report:")
-            # Convert class names to strings if they're numeric
-            class_names_str = [str(name) for name in self.class_names]
-            report = classification_report(
-                y_test, y_test_pred, 
-                target_names=class_names_str,
-                output_dict=True
-            )
-            print(classification_report(y_test, y_test_pred, target_names=class_names_str))
-            
-            # Generate confusion matrix
-            cm = confusion_matrix(y_test, y_test_pred)
-            
-            # Display confusion matrix in console
-            self._print_confusion_matrix(cm)
             
             results = {
                 'train_accuracy': train_accuracy,
-                'test_accuracy': test_accuracy,
                 'cv_scores': cv_scores,
                 'cv_mean': cv_scores.mean(),
                 'cv_std': cv_scores.std(),
-                'classification_report': report,
-                'confusion_matrix': cm,
-                'X_test': X_test,
-                'y_test': y_test,
-                'y_test_pred': y_test_pred
             }
+            
+            # Evaluate on validation set if provided
+            if X_val is not None and y_val is not None:
+                # Encode validation labels
+                y_val_encoded = self.label_encoder.transform(y_val)
+                y_val_pred = self.pipeline.predict(X_val)
+                val_accuracy = accuracy_score(y_val_encoded, y_val_pred)
+                
+                print(f"\n{'='*80}")
+                print("VALIDATION RESULTS")
+                print(f"{'='*80}")
+                print(f"Validation Accuracy: {val_accuracy:.4f}")
+                
+                # Generate classification report on validation data
+                print("\nClassification Report (Validation Data):")
+                class_names_str = [str(name) for name in self.class_names]
+                report = classification_report(
+                    y_val_encoded, y_val_pred, 
+                    target_names=class_names_str,
+                    output_dict=True
+                )
+                print(classification_report(y_val_encoded, y_val_pred, target_names=class_names_str))
+                
+                # Generate confusion matrix on validation data
+                cm = confusion_matrix(y_val_encoded, y_val_pred)
+                
+                # Display confusion matrix in console
+                self._print_confusion_matrix(cm)
+                
+                results['val_accuracy'] = val_accuracy
+                results['classification_report'] = report
+                results['confusion_matrix'] = cm
+            else:
+                # If no validation set, show training confusion matrix
+                print("\nClassification Report (Training Data):")
+                class_names_str = [str(name) for name in self.class_names]
+                report = classification_report(
+                    y_train, y_train_pred, 
+                    target_names=class_names_str,
+                    output_dict=True
+                )
+                print(classification_report(y_train, y_train_pred, target_names=class_names_str))
+                
+                cm = confusion_matrix(y_train, y_train_pred)
+                self._print_confusion_matrix(cm)
+                
+                results['classification_report'] = report
+                results['confusion_matrix'] = cm
         
         return results
     
