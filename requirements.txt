@@ -9,3 +9,10 @@ soundfile==0.12.1
 tqdm==4.66.1
 openpyxl==3.1.2
 
+# Jupyter and visualization packages
+jupyter>=1.0.0
+notebook>=7.0.0
+plotly>=5.0.0
+scikit-plot>=0.3.7
+ipywidgets>=8.0.0
+
