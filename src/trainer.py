@@ -59,6 +59,7 @@ class AudioClassifier:
                 kernel='rbf',
                 C=1.0,
                 random_state=self.random_state,
+                class_weight='balanced',
                 probability=True
             )
         elif self.model_type == 'logistic_regression':
@@ -66,10 +67,13 @@ class AudioClassifier:
                 random_state=self.random_state,
                 max_iter=1000,
                 multi_class='multinomial',
-                solver='lbfgs'
+                solver='lbfgs',
+                class_weight='balanced'
             )
         elif self.model_type == 'linear_regression':
-            model = LinearRegression()
+            model = LinearRegression(
+                class_weight='balanced'
+            )
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
         
